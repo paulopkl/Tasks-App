@@ -6,6 +6,9 @@ import commonStyles from '../commonStyles';
 import Icon from 'react-native-vector-icons/FontAwesome';
 
 import todayImage from '../../assets/imgs/today.jpg';
+import tomorrowImage from '../../assets/imgs/tomorrow.jpg';
+import weekImage from '../../assets/imgs/week.jpg';
+import monthImage from '../../assets/imgs/month.jpg';
 
 import moment from 'moment';
 import 'moment/locale/pt-br';
@@ -13,112 +16,108 @@ import 'moment/locale/pt-br';
 import Task from '../components/Task';
 
 import AddTask from './AddTask';
+import AsyncStorage from '@react-native-community/async-storage';
+
+import axios from 'axios';
+import { server, showError, showSuccess } from '../common';
+
+const initialState = { 
+    showDoneTasks: true,
+    showAddTask: true,
+    visibleTasks: [],
+    tasks: [], 
+    // tasks: [
+    //     { 
+    //         id: Math.random(), 
+    //         desc: 'Buy React-Native Book', 
+    //         estimateAt: new Date(),
+    //         doneAt: new Date(),
+    //     },
+    //     { 
+    //         id: Math.random(), 
+    //         desc: 'Read React-Native Book', 
+    //         estimateAt: new Date(),
+    //         doneAt: null,
+    //     }
+    // ]
+};
 
 class TaskList extends Component {
 
-    state = {
-        showDoneTasks: true,
-        showAddTask: true,
-        visibleTasks: [],
-        tasks: [
-            { 
-                id: Math.random(), 
-                desc: 'Buy React-Native Book', 
-                estimateAt: new Date(),
-                doneAt: new Date(),
-            },
-            { 
-                id: Math.random(), 
-                desc: 'Read React-Native Book', 
-                estimateAt: new Date(),
-                doneAt: null,
-            },
-            { 
-                id: Math.random(), 
-                desc: 'Buy React-Native Book', 
-                estimateAt: new Date(),
-                doneAt: new Date(),
-            },
-            { 
-                id: Math.random(), 
-                desc: 'Read React-Native Book', 
-                estimateAt: new Date(),
-                doneAt: null,
-            },
-            { 
-                id: Math.random(), 
-                desc: 'Buy React-Native Book', 
-                estimateAt: new Date(),
-                doneAt: new Date(),
-            },
-            { 
-                id: Math.random(), 
-                desc: 'Read React-Native Book', 
-                estimateAt: new Date(),
-                doneAt: null,
-            },
-            { 
-                id: Math.random(), 
-                desc: 'Buy React-Native Book', 
-                estimateAt: new Date(),
-                doneAt: new Date(),
-            },
-            { 
-                id: Math.random(), 
-                desc: 'Read React-Native Book', 
-                estimateAt: new Date(),
-                doneAt: null,
-            },
-            { 
-                id: Math.random(), 
-                desc: 'Buy React-Native Book', 
-                estimateAt: new Date(),
-                doneAt: new Date(),
-            },
-            { 
-                id: Math.random(), 
-                desc: 'Read React-Native Book', 
-                estimateAt: new Date(),
-                doneAt: null,
-            },
-        ]
-    }
+    state = initialState;
 
-    componentDidMount() {
-        this.filterTasks();
+    componentDidMount = async () => {
+        const stateString = await AsyncStorage.getItem('tasksState');
+        const savedState = JSON.parse(stateString) || initialState;
+        this.setState({
+            showDoneTasks: savedState.showDoneTasks,
+        }, this.filterTasks);
+
+        this.loadTasks();
     }
 
     toogleFilter = () => {
         this.setState({ showDoneTasks: !this.state.showDoneTasks }, this.filterTasks);
     }
 
-    toogleTask = taskId => {
-        const tasks = [...this.state.tasks];
+    toogleTask = async taskId => {
+        // const tasks = [...this.state.tasks];
 
-        tasks.forEach(task => {
-            if(task.id === taskId) { // If tasks.id it's equals to taskId received then
-                task.doneAt = task.doneAt ? null : new Date(); // this task.doneAt receive null if defined or new Date()
-            }
-        });
+        // tasks.forEach(task => {
+        //     if(task.id === taskId) { // If tasks.id it's equals to taskId received then
+        //         task.doneAt = task.doneAt ? null : new Date(); // this task.doneAt receive null if defined or new Date()
+        //     }
+        // });
 
-        this.setState(tasks, this.filterTasks);
+        // this.setState(tasks, this.filterTasks);
+
+        await axios.put(`${server}/tasks/${taskId}/toogle`)
+            .catch(err => showError(err));
+        this.loadTasks();
     }
 
-    addTask = newTask => {
+    addTask = async newTask => {
         if (!newTask.desc || !newTask.desc.trim()) { // 
             Alert.alert('Dados inválidos', 'Descrição não informada!');
             return;
         }
 
-        const tasks = [...this.state.tasks];
-        tasks.push({ 
-            id: Math.random(), 
-            desc: newTask.desc, 
-            estimateAt: newTask.date,
-            doneAt: null
-        });
+        // const tasks = [...this.state.tasks];
+        // tasks.push({ 
+        //     id: Math.random(), 
+        //     desc: newTask.desc, 
+        //     estimateAt: newTask.date,
+        //     doneAt: null
+        // });
 
-        this.setState({ tasks, showAddTask: false }, this.filterTasks);
+        // this.setState({ tasks, showAddTask: false }, this.filterTasks);
+
+        const data = {
+            desc: newTask.desc,
+            estimateAt: newTask.date,
+        }
+
+        await axios.post(`${server}/tasks`, data)
+            .then(res => {
+                showSuccess(res)
+            })
+            .catch(err => {
+                showError(err)
+            });
+
+        this.setState({ showAddTask: false }, this.loadTasks);
+    }
+
+    loadTasks = async () => {
+        const maxDate = moment().add({ days: this.props.daysAhead }).format('YYYY-MM-DD 23:59:59');
+        console.log(maxDate);
+        await axios.get(`${server}/tasks?date=${maxDate}`)
+            .then(res => {
+                this.setState({ tasks: res.data }, this.filterTasks);
+            })
+            .catch(err => {
+                showError(err);
+            });
     }
 
     filterTasks = () => {
@@ -131,6 +130,38 @@ class TaskList extends Component {
         }
 
         this.setState({ visibleTasks });
+        AsyncStorage.setItem('tasksState', JSON.stringify(this.state)); // Clones the state on the device
+    }
+
+    deleteTask = async taskId => {
+        // const tasks = this.state.tasks.filter(task => {
+        //     return task.id !== id;
+        // });
+
+        // this.setState({ tasks }, this.filterTasks);
+
+        await axios.delete(`${server}/tasks/${taskId}`)
+            .catch(err => showError(err));
+        this.loadTasks();
+
+    }
+
+    getImage = () => {
+        switch (this.props.daysAhead) {
+            case 0: { return todayImage }
+            case 1: { return tomorrowImage }
+            case 7: { return weekImage }
+            default: { return monthImage }
+        }
+    }
+
+    getColor = () => {
+        switch (this.props.daysAhead) {
+            case 0: { return commonStyles.colors.today }
+            case 1: { return commonStyles.colors.tomorrow }
+            case 7: { return commonStyles.colors.week }
+            default: { return commonStyles.colors.month }
+        }
     }
 
     render() {
@@ -142,8 +173,11 @@ class TaskList extends Component {
                     isVisible={this.state.showAddTask}
                     onSave={this.addTask}
                 />
-                <ImageBackground source={todayImage} style={styles.background}>
+                <ImageBackground source={this.getImage()} style={styles.background}>
                     <View style={styles.iconBar}>
+                        <TouchableOpacity onPress={() => this.props.navigation.openDrawer()}>
+                            <Icon name="bars" size={20} color={commonStyles.colors.secondary} />
+                        </TouchableOpacity>
                         <TouchableOpacity onPress={this.toogleFilter}>
                             <Icon 
                                 name={this.state.showDoneTasks ? 'eye' : 'eye-slash'} 
@@ -153,7 +187,7 @@ class TaskList extends Component {
                         </TouchableOpacity>
                     </View>
                     <View style={styles.titleBar}>
-                        <Text style={styles.title}>Hoje</Text>
+                        <Text style={styles.title}>{this.props.title}</Text>
                         <Text style={styles.subTitle}>{today}</Text>
                     </View>
                 </ImageBackground>
@@ -161,14 +195,17 @@ class TaskList extends Component {
                     <FlatList
                         data={this.state.visibleTasks}
                         keyExtractor={item => String(item.id)}
-                        renderItem={obj => <Task {...obj.item} toogleTask={this.toogleTask} />}
+                        renderItem={obj => <Task {...obj.item} 
+                            onToogleTask={this.toogleTask} 
+                            onDelete={this.deleteTask} 
+                        />}
                     />
                 </View>
                 <TouchableOpacity 
-                    style={styles.addButton} 
+                    style={[styles.addButton, { backgroundColor: this.getColor() }]}
                     onPress={() => this.setState({ showAddTask: true })}
                     activeOpacity={0.7}>
-                        <Icon name="plus" size={20} color={commonStyles.colors.secondary}/>
+                        <Icon name="plus" size={20} color={commonStyles.colors.secondary} />
                 </TouchableOpacity>
             </View>
         );
@@ -212,7 +249,7 @@ const styles = StyleSheet.create({
     iconBar: {
         flexDirection: 'row',
         marginHorizontal: 20,
-        justifyContent: 'flex-end',
+        justifyContent: 'space-between',
         marginTop: Platform.OS === 'ios' ? 30 : 10 
     },
 
@@ -223,7 +260,6 @@ const styles = StyleSheet.create({
         width: 55,
         height: 55,
         borderRadius: 30,
-        backgroundColor: commonStyles.colors.today,
         justifyContent: 'center',
         alignItems: 'center'
     }
